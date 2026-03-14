@@ -19,5 +19,23 @@ jobs:
           git clone --mirror git://sourceware.org/git/binutils-gdb.git repo.git
           cd repo.git
           git remote add mirror git@github.com:memfault/binutils-gdb.git
-          # Push all branches and tags; use --force to handle rebased upstream refs
-          git push mirror --prune +refs/heads/*:refs/heads/* +refs/tags/*:refs/tags/*
+          # Push all branches and tags; force to handle rebased upstream refs
+          git push mirror +refs/heads/*:refs/heads/* +refs/tags/*:refs/tags/*
+          # Prune mirror branches that were deleted upstream, but preserve github-mirror
+          git ls-remote mirror 'refs/heads/*' \
+            | awk '{print $2}' \
+            | grep -v '^refs/heads/github-mirror$' \
+            | while read ref; do
+                branch="${ref#refs/heads/}"
+                if ! git show-ref --quiet "refs/heads/$branch"; then
+                  git push mirror --delete "$branch" || true
+                fi
+              done
+          # Prune tags deleted upstream
+          git ls-remote mirror 'refs/tags/*' \
+            | awk '{print $2}' \
+            | while read ref; do
+                if ! git show-ref --quiet "$ref"; then
+                  git push mirror --delete "${ref#refs/tags/}" || true
+                fi
+              done
