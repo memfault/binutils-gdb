@@ -14,14 +14,26 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.MIRROR_DEPLOY_KEY }}
 
-      - name: Fetch from sourceware and push to mirror
+      - name: Sync sourceware → GitHub mirror
         run: |
-          git clone --mirror git://sourceware.org/git/binutils-gdb.git repo.git
+          # Seed from the GitHub mirror so we only fetch the delta from sourceware
+          git clone --mirror git@github.com:memfault/binutils-gdb.git repo.git
           cd repo.git
+
+          # Remove the github-mirror branch so it is never overwritten by the
+          # sourceware fetch and never accidentally pushed back to sourceware.
+          git update-ref -d refs/heads/github-mirror || true
+
+          git remote add upstream git://sourceware.org/git/binutils-gdb.git
+
+          # Fetch only what changed since the last sync
+          git fetch --prune upstream '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
+
+          # Push updates back; force-push handles any upstream rebases
           git remote add mirror git@github.com:memfault/binutils-gdb.git
-          # Push all branches and tags; force to handle rebased upstream refs
           git push mirror +refs/heads/*:refs/heads/* +refs/tags/*:refs/tags/*
-          # Prune mirror branches that were deleted upstream, but preserve github-mirror
+
+          # Prune branches deleted upstream, but preserve github-mirror
           git ls-remote mirror 'refs/heads/*' \
             | awk '{print $2}' \
             | grep -v '^refs/heads/github-mirror$' \
@@ -31,6 +43,7 @@ jobs:
                   git push mirror --delete "$branch" || true
                 fi
               done
+
           # Prune tags deleted upstream
           git ls-remote mirror 'refs/tags/*' \
             | awk '{print $2}' \
