@@ -1,0 +1,23 @@
+name: Mirror Sync
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # nightly at 03:00 UTC
+  workflow_dispatch:        # allow manual runs
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up SSH deploy key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.MIRROR_DEPLOY_KEY }}
+
+      - name: Fetch from sourceware and push to mirror
+        run: |
+          git clone --mirror git://sourceware.org/git/binutils-gdb.git repo.git
+          cd repo.git
+          git remote add mirror git@github.com:memfault/binutils-gdb.git
+          # Push all branches and tags; use --force to handle rebased upstream refs
+          git push mirror --prune +refs/heads/*:refs/heads/* +refs/tags/*:refs/tags/*
